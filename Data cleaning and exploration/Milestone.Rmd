@@ -15,10 +15,10 @@ library(lubridate)
 library(stringr)
 library(ggplot2)
 library(e1071)
-library(tidytext)
 library(DT)
 library(tm)
 library(tidyverse)
+library(tidytext)
 library(stringr)
 library(leaflet)
 library(ggmap)
@@ -30,6 +30,11 @@ reviews<-read_csv("reviews.csv")
 calendar<-read_csv("calendar.csv")
 listings<-read_csv("listings.csv")
 ```
+
+
+### e) Other Contributions
+
+This R script below is used for Exploratory data analysis. Most of the plots in the preliminary analysis were implemented using ggplots. For outlier detection, we used 1.5IQR rule to reduce the skewness, after which approximately 90% of the data is retained which is a satisfactory representation. The density of the listings accross neighbourhoods were visualised using an interactive map created with the help of the 'leaflet' package. To find the most common words in reviews and listing descriptions, we used 'unnest_token' function present in the 'tidytext' package in the first step to tokenise the words from the texts. The scientific notations on the x-axis lables in the top 20 words plots were formatted using package 'scales'. 
 
 ### Listing price
 
