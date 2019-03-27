@@ -1,0 +1,250 @@
+---
+title: "AirbnbLoyalty"
+author: "Himanshi"
+date: "March 24, 2019"
+output: html_document
+---
+
+
+```{r}
+
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(scales)
+library(data.table)
+library(utils)
+
+###############################################
+##Loading data of Mar 2019 to Mar 2020
+###############################################
+setwd("C:/Users/himan/Downloads/INST737/airbnb data/2019to2020")
+reviews = fread("reviews.csv")
+calendar = fread("calendar.csv")
+listings = fread("listings.csv")
+
+
+```
+
+## Data Cleaning
+
+```{r}
+#Adding a column year in calendar
+#library(lubridate)
+#calendar$year <- year(calendar$date)
+
+
+```
+
+```{r}
+
+#Adding a column year in listings
+#listings$year = calendar[match(listings$id, calendar$listing_id),"year"]
+
+
+```
+
+```{r}
+#Adding a column year in reviews
+#library(lubridate)
+#reviews$year <- year(reviews$date)
+
+```
+
+```{r}
+#range(reviews$year)
+#table(reviews$year)
+
+#reviews = reviews %>%
+#  filter(year>2014)
+
+#range(reviews$year)
+#table(reviews$year)
+
+```
+
+
+```{r}
+reviews$date<-as.Date(reviews$date, format="%Y-%m-%d")
+calendar$date<-as.Date(calendar$date, format="%Y-%m-%d")
+
+range(calendar$date)
+range(reviews$date)
+
+```
+
+```{r}
+###############################################
+##Loading data of Mar 2018 to Mar 2019
+###############################################
+
+setwd("C:/Users/himan/Downloads/INST737/airbnb data/2018to2019")
+reviews2 = fread("reviews.csv")
+calendar2 = fread("calendar.csv")
+listings2 = fread("listings.csv")
+
+```
+
+```{r}
+#Adding a column year in calendar
+#library(lubridate)
+#calendar2$year <- year(calendar2$date)
+
+#Adding a column year in listings
+#listings2$year = calendar2[match(listings2$id, calendar2$listing_id),"year"]
+
+#Adding a column year in reviews
+#library(lubridate)
+#reviews2$year <- year(reviews2$date)
+
+
+```
+
+```{r}
+#range(reviews2$year)
+#table(reviews2$year)
+
+#reviews2 = reviews2 %>%
+#  filter(year>2014)
+
+#range(reviews2$year)
+#table(reviews2$year)
+
+
+```
+
+```{r}
+reviews2$date<-as.Date(reviews2$date, format="%Y-%m-%d")
+calendar2$date<-as.Date(calendar2$date, format="%Y-%m-%d")
+
+range(calendar2$date)
+range(reviews2$date)
+
+```
+
+```{r}
+
+#Saving host data
+host <- data.frame(cbind(
+listing_id = listings$id,
+host_id = listings$host_id,
+host_name = listings$host_name,
+host_since = listings$host_since,
+host_response_rate = listings$host_response_rate,
+host_is_superhost = listings$host_is_superhost,
+first_seen = listings$first_review,
+last_seen = listings$last_review,
+neighbourhood = listings$neighbourhood,
+room_type = listings$room_type,
+price = gsub("[$,]", "", listings$price),
+host_identity_verified = listings$host_identity_verified,
+number_of_reviews = listings$number_of_reviews,
+reviews_per_month = listings$reviews_per_month,
+review_scores_rating = listings$review_scores_rating,
+host_listings_count = listings$host_listings_count,
+amenities = listings$amenities,
+year = listings$year))
+
+host$price<-as.numeric(host$price)
+host$host_since<-as.Date(host$host_since, format="%m/%d/%Y")
+host$first_seen<-as.Date(host$first_seen, format="%m/%d/%Y")
+host$last_seen<-as.Date(host$last_seen, format="%m/%d/%Y")
+host$number_of_reviews = as.numeric(host$number_of_reviews)
+host$review_scores_rating = as.numeric(host$review_scores_rating)
+host$host_listings_count = as.numeric(host$host_listings_count)
+host$reviews_per_month = as.numeric(host$reviews_per_month)
+
+
+
+```
+
+
+```{r}
+#Saving guest data
+
+#guest <- data.frame(cbind(
+#listing_id = reviews$listing_id,
+#guest_id = reviews$id,
+#review_date = reviews$date,
+#guest_id = reviews$reviewer_id,
+#guest_name = reviews$reviewer_name,
+#comments = reviews$comments
+#))
+
+```
+
+
+```{r}
+#Building host predictor dataset by aggregating
+#Predictors - Average price, Max price, Min price, Last Overall Rating, Avg no of reviews, Last seen, First seen, Host since, Is Multilisting, Listing recency, Review Recency.
+
+host_aggregators <- host %>% 
+  group_by(host_id) %>%
+  summarize(
+    #host_id = first(host_id),
+    #fs_review_date = first(review_date),
+    mean_price = mean(price, na.rm=TRUE),
+    min_price = min(price, na.rm=TRUE),
+    max_price = max(price, na.rm=TRUE),
+    count_multilisting = first(host_listings_count, na.rm=TRUE),
+    host_since = first(year(host_since), na.rm=TRUE),
+    first_seen = min(year(first_seen), na.rm=TRUE),
+    last_seen = min(year(last_seen), na.rm=TRUE),
+    host_identity_verified = first(host_identity_verified, na.rm=TRUE),
+    review_scores_rating = mean(review_scores_rating, na.rm = TRUE),
+    host_is_superhost_2019 = first(host_is_superhost, na.rm=TRUE),
+    max_reviews_per_month = max(reviews_per_month, na.rm=TRUE),
+    min_reviews_per_month = min(reviews_per_month, na.rm=TRUE),
+    avg_number_reviews = mean(number_of_reviews, na.rm=TRUE)
+  )
+
+host_aggregators2 <- listings2 %>%
+  group_by(host_id) %>%
+  summarize(list_count = first(host_listings_count))
+
+str(host_aggregators2)
+
+```
+
+```{r}
+
+#Adding no_of_listings in next year column
+
+host_aggregators$list_count <- host_aggregators2[match(host_aggregators$host_id, host_aggregators2$host_id),"list_count"]
+
+list_count_frame = as.data.frame(host_aggregators$list_count)
+host_aggregators$list_count_frame <- list_count_frame$list_count
+host_aggregators$list_count_frame <- as.numeric(host_aggregators$list_count_frame)
+host_aggregators$list_count <- NULL
+
+#Adding a column difference
+
+#mutate(host_aggregators, difference_value = count_multilisting-list_count_frame)
+
+host_aggregators$diff_value <- host_aggregators$count_multilisting - host_aggregators$list_count_frame
+
+table(host_aggregators$diff_value)
+
+#if 
+host_aggregators$diff_change <- ifelse(host_aggregators$diff_value > 0, "inc", ifelse(host_aggregators$diff_value < 0,"dec","same"))
+
+table(host_aggregators$diff_change)
+
+#Host present in next year
+
+colSums(is.na(host_aggregators)) #check na values in each column
+
+host_aggregators$exists_in_2019 <- ifelse(!is.na(host_aggregators$diff_value),"y","n")
+
+table(host_aggregators$exists_in_2019)
+
+#mutate(host_aggregators, gain = ArrDelay - DepDelay)
+#writing csv 
+str(host_aggregators)
+write.csv(host_aggregators, "host_aggregators.csv")
+
+```
+
+
+
+
