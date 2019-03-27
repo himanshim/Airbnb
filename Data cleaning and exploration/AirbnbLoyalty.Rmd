@@ -154,7 +154,7 @@ host$review_scores_rating = as.numeric(host$review_scores_rating)
 host$host_listings_count = as.numeric(host$host_listings_count)
 host$reviews_per_month = as.numeric(host$reviews_per_month)
 
-
+str(host)
 
 ```
 
