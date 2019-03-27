@@ -188,8 +188,8 @@ CrossTable(host_test$exists_in_2019,	host_pred,
 # As we can see, this is not a very good model. This model can be improved using boosting. The number of trials that we use is the number of times the decision tree will be built. The final tree is the result of voting from all the trials
 
 ```{r}
-host_boost <- C5.0(host_train[-9],	host_train$exists_in_2019, trials	= 20)	
-host_boost	
+host_boost <- C5.0(host_train[-9],	host_train$exists_in_2019, trials	= 24)	
+host_boost
 summary(host_boost)	
 
 
