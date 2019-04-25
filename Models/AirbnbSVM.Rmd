@@ -1,0 +1,99 @@
+---
+title: "AirbnbSVM"
+author: "Himanshi"
+date: "April 24, 2019"
+output: html_document
+---
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+
+host = read.csv("host_aggregators.csv")
+
+#checking NA values
+colSums(is.na(host))
+
+#removing columns with NA values
+
+host$list_count_frame <- NULL
+host$diff_value <- NULL
+host$diff_change <- NULL
+host$X <- NULL
+host$review_scores_rating <- NULL
+#host_dt$host_since <- NULL
+
+library(tidyr)
+host <- drop_na(host) #count row dropped from 37689 to 37681
+
+colSums(is.na(host)) #check na values in each column
+
+#Changing values for dates
+host$host_since <- as.numeric(2019 - host$host_since)
+host$first_seen <- as.numeric(2019 - host$first_seen)
+host$last_seen <- as.numeric(2019 - host$last_seen)
+
+#Dealing with missing values
+levels(host$host_identity_verified)[1] = "missing"
+levels(host$host_is_superhost_2019)[1] = "missing"
+
+host$host_identity_verified <- factor(host$host_identity_verified)
+host$host_is_superhost_2019 <- factor(host$host_is_superhost_2019)
+
+table(host$host_identity_verified)
+table(host$host_is_superhost_2019)
+
+#Dealing with factors - saw this on Stackoverflow [remove if not required]
+for (i in colnames(host[, sapply(host, is.factor)])){
+    for (level in unique(host[, i])){
+        host[paste(i, level, sep = "_")] = 
+            as.integer(ifelse(host[, i] == level, 1, -1))
+    }
+}
+
+#Dividing into test and train
+set.seed(100)
+
+train <- sample(1:nrow(host),nrow(host)/2)
+host_test <- host[-train,]
+host_train <- host[train,]
+
+
+```
+
+## Linear SVM
+
+```{r}
+library("kernlab")
+
+host_classifier = ksvm(exists_in_2019~.,data=host_train,kernel="vanilladot")
+
+host_classifier
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
