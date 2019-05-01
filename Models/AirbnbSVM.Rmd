@@ -1,0 +1,303 @@
+---
+title: "AirbnbSVM"
+author: "Himanshi"
+date: "April 24, 2019"
+output: html_document
+---
+
+# Binary SVM
+
+Here, the response variable is whether the host returned back in 2019 or not, i.e. whether he was loyal. The dependent variable is "exists_in_2019"
+
+Feature selection - 
+Using the host_aggregators dataset,
+Using Vanilladot and rbfdot linear classifier with following variables :
+1. mean_price (continuous)
+2. min_price (continuous)
+3. max_price (continuous)
+4. count_multilisting (continuous)
+5. host_since (continuous)
+6. host_identity_verified (factor)
+7. host_is_superhost_2019 (factor)
+8. avg_number_reviews ((continuous))
+9. exists_in_2009 ~ response variable
+
+## Host data preparation
+```{r}
+
+host = read.csv("host_aggregators.csv")
+
+#checking NA values
+colSums(is.na(host))
+
+#removing columns with NA values and which we dont need
+
+host$list_count_frame <- NULL
+host$diff_value <- NULL
+host$diff_change <- NULL
+host$X <- NULL
+host$review_scores_rating <- NULL
+#host_dt$host_since <- NULL
+
+library(tidyr)
+host <- drop_na(host) #count row dropped from 37689 to 37681
+
+colSums(is.na(host)) #check na values in each column
+
+#Changing values for dates
+host$host_since <- as.numeric(2019 - host$host_since)
+host$first_seen <- as.numeric(2019 - host$first_seen)
+host$last_seen <- as.numeric(2019 - host$last_seen)
+
+#Dealing with missing values
+levels(host$host_identity_verified)[1] = "missing"
+levels(host$host_is_superhost_2019)[1] = "missing"
+
+host$host_identity_verified <- factor(host$host_identity_verified)
+host$host_is_superhost_2019 <- factor(host$host_is_superhost_2019)
+
+table(host$host_identity_verified)
+table(host$host_is_superhost_2019)
+
+##Dealing with factors - saw this on Stackoverflow [remove if not required]
+#for (i in colnames(host[, sapply(host, is.factor)])){
+#    for (level in unique(host[, i])){
+#        host[paste(i, level, sep = "_")] = 
+#            as.integer(ifelse(host[, i] == level, 1, -1))
+#    }
+#}
+
+#Dividing into test and train
+set.seed(100)
+
+train <- sample(1:nrow(host),nrow(host)/2)
+host_test <- host[-train,]
+host_train <- host[train,]
+
+#table(host$first_seen)
+#table(host$last_seen)
+#table(host$max_reviews_per_month)
+#table(host$min_reviews_per_month)
+
+
+```
+
+## Binary classification with Linear (vanilla) kernel function
+```{r}
+library("kernlab")
+
+host_classifier = ksvm(exists_in_2019~.,data=host_train[,c(2:6,9,10,13,14)],kernel="vanilladot")
+
+host_classifier
+
+#Running predictions
+host_predictions = predict(host_classifier,host_test[,c(2:6,9,10,13,14)])
+head(host_predictions)
+
+table(host_predictions,host_test$exists_in_2019)
+
+#Overall accuracy
+agreement = host_predictions == host_test$exists_in_2019
+
+table(agreement)
+#13083 times the loyalty was correctly predicted
+prop.table(table(agreement)) #expressed in %
+
+```
+
+The value of number of support vector here is 11904, that is the number of points that are necessary to separate the hyperplanes into two, WHEN ITS IN LINEAR SPACE.
+This means that the linear model predicted the host loyalty 13083 times, i.e. ~70% correctly.
+
+## Binary classification with Radial/RBF/Laplace Kernel SVM
+
+```{r}
+
+host_classifier_rbf = ksvm(exists_in_2019~.,data=host_train[,c(2:6,9,10,13,14)],kernel="rbfdot")
+#rbf computes the weights that best represents the hyperplates. It uses gradient descent little by little and tries to see when it reaches the minimumvalue.
+
+host_classifier_rbf
+#This shows the number of support vectors that we have - are the points that are necessary to separate the hyperplanes into multiple dimension
+
+#Running predictions
+host_predictions_rbf = predict(host_classifier_rbf,host_test[,c(2:6,9,10,13,14)])
+#we need to check whether host loyalty that have been predicted are similar or not to the actual host loyalty in testing dataset
+
+table(host_predictions_rbf,host_test$exists_in_2019)
+
+#Overall accuracy
+agreement_rbf = host_predictions_rbf == host_test$exists_in_2019
+
+table(agreement_rbf)
+#14746 times the letter was correctly predicted
+prop.table(table(agreement_rbf)) #expressed in %
+
+
+```
+
+The number of true cases has increased in rbf, by using another type of kernel which projects the features into another dimension, we enhance the ability to separate those. Accuracy increased approximately by 8%.
+
+# Multiclass SVM
+
+Using a multiclass SVM to predict the price of an Airbnb listing, here the price is classified as -
+1. Cheap
+2. Affordable
+3. Expensive
+
+Cleaning the listing data first by selecting the relevant features to be included in the model -
+
+```{r}
+
+listings <- read.csv("C:/Users/himan/Downloads/INST737/airbnb data/2018to2019/listings.csv")
+
+library(dplyr)
+
+listings_sub  <- listings %>% select(host_is_superhost,room_type,bathrooms,bedrooms,accommodates,number_of_reviews,security_deposit,cleaning_fee,review_scores_rating,review_scores_communication,reviews_per_month,price)
+
+listings_sub <- na.omit(listings_sub)
+
+#Converting to numeric
+listings_sub$price<-as.numeric(listings_sub$price)
+listings_sub$cleaning_fee<-as.numeric(listings_sub$cleaning_fee)
+listings_sub$security_deposit<-as.numeric(listings_sub$security_deposit)
+
+#treating missing factors
+levels(listings_sub$host_is_superhost)[1] = "missing"
+listings_sub <- subset(listings_sub, host_is_superhost != "missing")
+listings_sub$host_is_superhost <- factor(listings_sub$host_is_superhost)
+table(listings_sub$host_is_superhost)
+table(listings_sub$room_type)
+
+#removing rows with less than 10$ price
+listings_sub<-subset(listings_sub, price > 10)
+
+str(listings_sub)
+
+
+```
+
+Converting price into factors.
+
+These levels were obtained by dividing the continous price variable into levels depending on its value. The division was done as - 
+Below 200 - cheap
+Betwn 200 - 500 affordable
+Above 500 - expensive
+
+Features for this model - 
+1. host_is_superhost          
+2. room_type                  
+3. bathrooms                  
+4. bedrooms                   
+5. accommodates               
+6. number_of_reviews          
+7. security_deposit           
+8. cleaning_fee               
+9. review_scores_rating       
+10. review_scores_communication
+11. reviews_per_month          
+12. price                      
+
+```{r}
+
+hist(listings_sub$price)
+
+summary(listings_sub$price)
+#Since the distribution is not normal, it did not make sense to spplit based on the quartiles. Splitting the data intuitively looking at the histogram.
+
+#Blow 200 - cheap
+#Betn 200 - 500 affordable
+#Abov 500 - expensive
+
+listings_sub$price_category <- cut(listings_sub$price, breaks=c(0, 150, 500, Inf),
+           labels=c("cheap","affordable","expensive"))
+
+table(listings_sub$price_category)
+
+listings_sub$price <- NULL
+
+```
+
+## Multiclass Linear kernel
+```{r}
+#Dividing into test and train data
+ntrain <- round(n*0.75)  # 75% for training set
+set.seed(314)    # Set seed for reproducible results
+tindex <- sample(n, ntrain)   # Create a random index
+listing_train <- listings_sub[tindex,]   # Create training set
+listing_test <- listings_sub[-tindex,]   # Create test set
+```
+
+```{r}
+#Building model based on linear kernel
+price_classifier <- svm(price_category~., data=listing_train, kernel="linear")
+
+#We see that the model found 81 support vectors distributed across the classes: 34 for cheap, 20 for affordable, and 27 for expensive
+summary(price_classifier)
+
+#plot(price_classifier, listing_train)
+
+#Running predictions
+price_predictions = predict(price_classifier,listing_test)
+#we need to check whether price category that have been predicted are similar or not to the actual price category in testing dataset
+
+table(price_predictions,listing_test$price_category)
+
+#Overall accuracy
+price_agreement = price_predictions == listing_test$price_category
+
+table(price_agreement)
+#14746 times the letter was correctly predicted
+prop.table(table(price_agreement)) #expressed in %
+
+```
+
+
+
+## Multiclass Radial kernel
+
+```{r}
+
+#Check C-classification type, gamma and cost values for tuning
+price_classifier_rbf <- svm(price_category~., data=listing_train, 
+        method="C-classification", kernel="radial", 
+        gamma=0.02, cost=8)
+
+#We see that the model found 98 support vectors distributed across the classes: 41 for cheap, 26 for affordable, and 31 for expensive
+summary(price_classifier_rbf)
+
+#plot(price_classifier_rbf, listing_train)
+
+#Running predictions
+price_predictions_rbf = predict(price_classifier_rbf,listing_test)
+#we need to check whether price category that have been predicted are similar or not to the actual price category in testing dataset
+
+table(price_predictions_rbf,listing_test$price_category)
+
+#Overall accuracy
+price_agreement_rbf = price_predictions_rbf == listing_test$price_category
+
+table(price_agreement_rbf)
+#14746 times the letter was correctly predicted
+prop.table(table(price_agreement_rbf)) #expressed in %
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

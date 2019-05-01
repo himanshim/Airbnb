@@ -1,0 +1,272 @@
+---
+title: "DecisionTreeLoyalty"
+author: "Himanshi"
+date: "March 26, 2019"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+#Train and test decision tree using test dataset
+
+```{r}
+
+host_dt <- read.csv("host_aggregators.csv")
+str(host_dt)
+
+host_dt$host_since <- as.numeric(host_dt$host_since)
+
+colSums(is.na(host_dt)) #check na values in each column
+
+#removing columns with NA values
+
+host_dt$list_count_frame <- NULL
+host_dt$diff_value <- NULL
+host_dt$diff_change <- NULL
+host_dt$X <- NULL
+#host_dt$host_since <- NULL
+
+library(tidyr)
+host_dt <- drop_na(host_dt) #count row dropped from 37698 to 29725
+
+colSums(is.na(host_dt)) #check na values in each column
+
+levels(host_dt$host_identity_verified)[1] = "missing"
+levels(host_dt$host_is_superhost_2019)[1] = "missing"
+
+host_dt<-host_dt[!(host_dt$last_seen == "Inf"),] #count row dropped from 29725 to 29723
+
+```
+
+## count the number of values for that variable
+
+
+```{r}
+
+table(host_dt$exists_in_2019)
+
+```
+
+## Factorizing mean price
+
+between 0-92 -> very cheap
+        93-288 -> cheap
+        288-310.6 -> moderate
+        310.6-533 -> expensive
+        533 and up -> very expensive
+
+```{r}
+
+hist(host_dt$mean_price)
+summary(host_dt$mean_price)
+
+host_dt$mean_price1 <- cut(host_dt$mean_price, breaks=c(0, 92, 288, 310, 533, Inf),
+           labels=c("very_cheap","cheap","moderate","expensive","very_expensive"))
+
+
+```
+
+## Factorizing mean review scores rating
+
+between 0-30 -> less
+        31-47 -> moderate
+        48 and up -> high
+
+```{r}
+hist(host_dt$review_scores_rating)
+summary(host_dt$review_scores_rating)
+
+host_dt$review_scores_rating1 <- cut(host_dt$review_scores_rating, breaks=c(0, 30, 47, Inf),
+           labels=c("less","moderate","high"))
+
+
+```
+
+## Factorizing avg_number_reviews
+
+between 0-58 -> very less
+        59-175 -> less
+        176-298 -> moderate
+        299-364 -> high
+        365 and up -> very high
+
+
+```{r}
+
+hist(host_dt$avg_number_reviews)
+summary(host_dt$avg_number_reviews)
+
+host_dt$avg_number_reviews1 <- cut(host_dt$avg_number_reviews, breaks=c(0, 58, 175, 298, 364, Inf),
+           labels=c("very_less","less","moderate","high","very_high"))
+
+```
+
+## Dividing into training and testing data
+
+```{r}
+
+str(host_dt)
+
+library(dplyr)
+
+host_tree <- select(host_dt, host_since, first_seen, last_seen, host_identity_verified, host_is_superhost_2019, mean_price1, review_scores_rating1, avg_number_reviews1, exists_in_2019)
+
+str(host_tree)
+
+set.seed(100)
+
+train <- sample(1:nrow(host_tree),nrow(host_tree)/2)
+host_test <- host_tree[-train,]
+host_train <- host_tree[train,]
+
+```
+
+## Checking the proportion of returned hosts
+
+```{r}
+#Original Dataset proportion of target variables
+prop.table(table(host_tree$exists_in_2019))
+
+#Test Dataset proportion of target variables
+prop.table(table(host_test$exists_in_2019))
+
+#Train Dataset proportion of target variables
+prop.table(table(host_train$exists_in_2019))
+
+```
+
+### Proportion seems balanced. Training and testing dataset is good!
+
+## Building C50 decision tree
+
+```{r}
+
+library(C50)
+
+str(host_train)
+
+host_model<-C5.0(host_train[-9],	host_train$exists_in_2019)
+
+
+```
+
+## Displaying facts about the tree
+
+```{r}
+
+host_model
+summary(host_model)
+
+```
+
+## 3618 cases it was actually not loyal, but in 1108 cases the decision tree wrongly classified it as loyal
+## 9371 cases it was actually a loyal host, but in 764 cases it wrongly classified it as loyal
+
+## Plotting the tree
+
+```{r}
+
+plot(host_model)
+
+```
+
+## We will see it on testing dataset as well, it is necessary to do on both because it will tell us whether the model was overfitted
+
+# Building cross tabulation matrix to display the confusion matrix nicely
+```{r}
+
+host_pred <- predict(host_model,host_test)
+library(gmodels)
+CrossTable(host_test$exists_in_2019,	host_pred, 
+           prop.chisq	=	FALSE, prop.c = FALSE, prop.r = FALSE,	
+           dnn	=	c('actual	loyalty',	'predicted	loyalty'))	
+
+
+```
+
+# As we can see, this is not a very good model. This model can be improved using boosting. The number of trials that we use is the number of times the decision tree will be built. The final tree is the result of voting from all the trials
+
+```{r}
+host_boost <- C5.0(host_train[-9],	host_train$exists_in_2019, trials	= 24)	
+host_boost
+summary(host_boost)	
+
+
+```
+
+# Trying to predict and seeing the accuracy for prediction after boosting
+
+```{r}
+host_boost_pred <- predict(host_boost, host_test)
+CrossTable(host_test$exists_in_2019, host_boost_pred,
+           prop.chisq = FALSE, prop.c = FALSE, prop.r = FALSE,
+           dnn = c('actual loyalty','predicted loyalty'))
+
+```
+
+## A little bit better than the training set. But not very significantly different. Shows that there was no over-fitting in the model. 
+
+# Bagging on host dataset
+
+```{r}
+#Considering all 8 features at each tree split
+
+library(randomForest)
+
+bag.host <- randomForest(exists_in_2019~.,data=host_train, mtry=8, importance=TRUE)
+bag.host
+
+```
+
+# Bagging Prediction
+```{r}
+
+host_bag_pred <- predict(bag.host,newdata = host_test)
+head(host_bag_pred)
+
+
+```
+
+# Checking the actual and predicted values for bagging
+
+```{r}
+
+plot(bag.host)
+plot(host_bag_pred,host_test$exists_in_2019, xlab = "Predicted values", ylab = "Actual Values", main = "Model performance for Bagging")
+
+```
+
+# Random Forests on host dataset
+
+```{r}
+
+#Considering only 5 features at each tree split
+
+library(randomForest)
+
+rf.host <- randomForest(exists_in_2019~.,data=host_train, mtry=2, importance=TRUE)
+rf.host
+
+
+```
+
+# Random Forests Prediction
+
+```{r}
+
+host_rf_pred <- predict(rf.host,newdata = host_test)
+head(host_rf_pred)
+
+
+```
+
+# Checking the actual and predicted values for bagging
+
+```{r}
+
+plot(rf.host)
+plot(host_rf_pred,host_test$exists_in_2019, xlab = "Predicted values", ylab = "Actual Values", main = "Model performance for Random Forests")
+
+
+```
